@@ -22,6 +22,9 @@ python3 -m venv .venv
 4. Presiona ▶. El LCD dice "Conectando WiFi" y luego muestra el paso de la receta.
 5. En la app, la barra lateral cambia a **ESP32 conectado**.
 
+Deja la pestaña de Wokwi **visible**: si la escondes, el navegador la frena y la simulación
+corre muy lento (los mensajes tardan en llegar).
+
 En Wokwi: haz clic en el **DHT22** para cambiar la temperatura, gira la **perilla** (fogón)
 y presiona los botones **SIGUIENTE** (verde) y **ATRÁS** (azul).
 

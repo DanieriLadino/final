@@ -374,12 +374,18 @@ def _panel_conexion():
     st.caption("Tópico: `%s`" % config.TOPICO_BASE)
 
     st.divider()
-    activo = st.toggle("ESP32 simulado", value=sim.corriendo, key="sim_toggle",
-                       help="Imita al ESP32 de Wokwi para probar sin la simulación. No lo actives a la vez que Wokwi.")
-    if activo and not sim.corriendo:
-        sim.iniciar()
-    elif not activo and sim.corriendo:
-        sim.detener()
+    # El interruptor siempre muestra el estado real del simulador (compartido por todas
+    # las pestañas) y solo lo cambia un clic, así otra pestaña abierta no lo vuelve a encender.
+    st.session_state["sim_toggle"] = sim.corriendo
+
+    def _cambiar_sim():
+        if st.session_state["sim_toggle"]:
+            sim.iniciar()
+        else:
+            sim.detener()
+
+    st.toggle("ESP32 simulado", key="sim_toggle", on_change=_cambiar_sim,
+              help="Imita al ESP32 de Wokwi para probar sin la simulación. No lo actives a la vez que Wokwi.")
     if sim.corriendo:
         _panel_simulador(sim)
 
