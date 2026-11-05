@@ -1,0 +1,2 @@
+Copia aquí el archivo de la fuente Nectarine (por ejemplo Nectarine-Regular.otf).
+La app la detecta sola. El logo ya usa la Nectarine original del PDF.

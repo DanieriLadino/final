@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@200;300;500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --azul:#004AAD; --crema:#FCF8ED; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; padding:0; background:transparent; font-family:'Poppins',sans-serif; color:var(--azul); }
+  .caja { display:flex; align-items:center; gap:16px; padding:6px 4px 10px 4px; }
+  button.mic {
+    flex:none; width:78px; height:78px; border-radius:50%; border:3px solid var(--azul);
+    background:var(--azul); color:var(--crema); cursor:pointer; position:relative;
+    box-shadow:5px 6px 0 0 rgba(0,74,173,.25); transition:transform .12s ease, box-shadow .12s ease;
+    display:flex; align-items:center; justify-content:center;
+  }
+  button.mic:hover { transform:translateY(-2px); }
+  button.mic:active { transform:translateY(2px); box-shadow:2px 3px 0 0 rgba(0,74,173,.25); }
+  button.mic svg { width:34px; height:34px; }
+  button.mic.escuchando { background:var(--crema); color:var(--azul); }
+  button.mic.escuchando::after {
+    content:""; position:absolute; inset:-10px; border-radius:50%; border:3px solid var(--azul);
+    animation:pulso 1.3s ease-out infinite;
+  }
+  button.mic.pausa { opacity:.55; }
+  button.mic.pausa::after { animation:none; opacity:.3; }
+  @keyframes pulso { from { transform:scale(.85); opacity:.9; } to { transform:scale(1.25); opacity:0; } }
+  .txt { min-width:0; }
+  .estado { font-weight:700; font-size:16px; letter-spacing:-.2px; }
+  .oido { font-weight:300; font-size:15px; margin-top:2px; min-height:22px;
+          white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .error { font-weight:500; font-size:13px; color:#B3261E; }
+</style>
+</head>
+<body>
+<div class="caja">
+  <button class="mic" id="mic" title="Hablar" aria-label="Activar micrófono">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2.5" width="6" height="12" rx="3"></rect>
+      <path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3.5"></path><path d="M8.5 21.5h7"></path>
+    </svg>
+  </button>
+  <div class="txt">
+    <div class="estado" id="estado">Toca el micrófono y habla</div>
+    <div class="oido" id="oido"></div>
+    <div class="error" id="error"></div>
+  </div>
+</div>
+<script>
+(function () {
+  // --- protocolo mínimo de componentes de Streamlit (sin npm) ---
+  function enviar(tipo, datos) {
+    window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: tipo }, datos || {}), "*");
+  }
+  function altura() { enviar("streamlit:setFrameHeight", { height: document.body.scrollHeight + 4 }); }
+  function devolver(valor) { enviar("streamlit:setComponentValue", { value: valor, dataType: "json" }); }
+
+  var btn = document.getElementById("mic");
+  var elEstado = document.getElementById("estado");
+  var elOido = document.getElementById("oido");
+  var elError = document.getElementById("error");
+
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var args = { continuo: false, idioma: "es-CO", max_palabras: 12 };
+  var rec = null, activo = false, quiereEscuchar = false, pausadoPorVoz = false;
+
+  if (!SR) {
+    btn.disabled = true;
+    elEstado.textContent = "Tu navegador no reconoce voz";
+    elError.textContent = "Abre la app en Google Chrome para usar el micrófono.";
+  }
+
+  // ¿La app está hablando? (para no escucharse a sí misma)
+  function appHablando() {
+    try {
+      var doc = window.parent.document;
+      var audios = doc.querySelectorAll("audio");
+      for (var i = 0; i < audios.length; i++) {
+        if (!audios[i].paused && !audios[i].ended) return true;
+      }
+      if (window.parent.speechSynthesis && window.parent.speechSynthesis.speaking) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function pintar() {
+    btn.classList.toggle("escuchando", activo || (args.continuo && quiereEscuchar));
+    btn.classList.toggle("pausa", pausadoPorVoz);
+    if (!SR) return;
+    if (pausadoPorVoz) elEstado.textContent = "El chef está hablando…";
+    else if (args.continuo && quiereEscuchar) elEstado.textContent = "Manos libres: te escucho";
+    else if (activo) elEstado.textContent = "Escuchando… habla ahora";
+    else if (args.continuo) elEstado.textContent = "Toca para activar manos libres";
+    else elEstado.textContent = "Toca el micrófono y habla";
+    altura();
+  }
+
+  function crear() {
+    var r = new SR();
+    r.lang = args.idioma;
+    r.continuous = !!args.continuo;
+    r.interimResults = true;
+    r.maxAlternatives = 1;
+    r.onstart = function () { activo = true; elError.textContent = ""; pintar(); };
+    r.onresult = function (ev) {
+      var parcial = "";
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        var t = ev.results[i][0].transcript.trim();
+        if (ev.results[i].isFinal) {
+          if (!t) continue;
+          if (appHablando()) { elOido.textContent = ""; continue; }       // eco de la propia voz
+          var palabras = t.split(/\s+/).length;
+          if (args.continuo && palabras > args.max_palabras) continue;    // frases largas = ruido
+          elOido.textContent = "“" + t + "”";
+          devolver({ texto: t, id: Date.now() + "-" + Math.random().toString(36).slice(2, 7) });
+          if (!args.continuo) quiereEscuchar = false;
+        } else {
+          parcial += t + " ";
+        }
+      }
+      if (parcial) elOido.textContent = parcial + "…";
+    };
+    r.onerror = function (ev) {
+      if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
+        elError.textContent = "Permite el micrófono en el candado de la barra de direcciones.";
+        quiereEscuchar = false;
+      } else if (ev.error === "no-speech" || ev.error === "aborted") {
+        // normal: silencio o pausa
+      } else if (ev.error === "network") {
+        elError.textContent = "El reconocimiento de voz necesita internet.";
+      } else {
+        elError.textContent = "Micrófono: " + ev.error;
+      }
+      pintar();
+    };
+    r.onend = function () {
+      activo = false;
+      pintar();
+      if (quiereEscuchar && args.continuo && !pausadoPorVoz) setTimeout(arrancar, 250);
+    };
+    return r;
+  }
+
+  function arrancar() {
+    if (!SR || activo) return;
+    try { rec = crear(); rec.start(); } catch (e) {}
+  }
+  function parar() {
+    quiereEscuchar = false;
+    if (rec) { try { rec.abort(); } catch (e) {} }
+    activo = false;
+    pintar();
+  }
+
+  btn.addEventListener("click", function () {
+    if (!SR) return;
+    if (activo || (args.continuo && quiereEscuchar)) { parar(); return; }
+    quiereEscuchar = true;
+    arrancar();
+    pintar();
+  });
+
+  // En modo manos libres: pausa mientras la app habla y retoma después.
+  setInterval(function () {
+    if (!args.continuo || !quiereEscuchar) { if (pausadoPorVoz) { pausadoPorVoz = false; pintar(); } return; }
+    var hablando = appHablando();
+    if (hablando && !pausadoPorVoz) {
+      pausadoPorVoz = true;
+      if (rec) { try { rec.abort(); } catch (e) {} }
+      pintar();
+    } else if (!hablando && pausadoPorVoz) {
+      pausadoPorVoz = false;
+      setTimeout(arrancar, 350);
+      pintar();
+    }
+  }, 250);
+
+  window.addEventListener("message", function (ev) {
+    var d = ev.data || {};
+    if (d.type !== "streamlit:render") return;
+    var a = d.args || {};
+    var antesContinuo = args.continuo;
+    args.continuo = !!a.continuo;
+    args.idioma = a.idioma || "es-CO";
+    args.max_palabras = a.max_palabras || 12;
+    if (antesContinuo !== args.continuo) {
+      parar();
+      if (args.continuo && a.autoiniciar) { quiereEscuchar = true; arrancar(); }
+    }
+    pintar();
+  });
+
+  enviar("streamlit:componentReady", { apiVersion: 1 });
+  pintar();
+})();
+</script>
+</body>
+</html>

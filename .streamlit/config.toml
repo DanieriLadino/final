@@ -1,0 +1,17 @@
+[server]
+enableStaticServing = true
+runOnSave = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#004AAD"
+backgroundColor = "#FCF8ED"
+secondaryBackgroundColor = "#F3EAD3"
+textColor = "#004AAD"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"

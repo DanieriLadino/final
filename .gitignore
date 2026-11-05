@@ -1,0 +1,11 @@
+# Entorno de Python
+.venv/
+__pycache__/
+*.pyc
+
+# Fotos y calificaciones guardadas al usar la app
+fotos/
+
+# Archivos del sistema y del editor
+.DS_Store
+.claude/

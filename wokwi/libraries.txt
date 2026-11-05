@@ -1,0 +1,7 @@
+# Librerías del proyecto en Wokwi (pestaña "Library Manager")
+PubSubClient
+ArduinoJson
+LiquidCrystal I2C
+DHT sensor library
+Adafruit Unified Sensor
+ESP32Servo
