@@ -189,8 +189,8 @@ hr { border-color: rgba(0,74,173,.2); }
   border-radius: 20px 26px 20px 6px; padding: 10px 16px; margin-bottom: 8px; font-weight: 400; }
 .chef-dice img { border-radius: 12px; }
 .chef-dice .q { font-weight: 300; }
-[data-testid="stAudio"] { height: 0; overflow: hidden; margin: 0 !important; }
-audio { height: 0 !important; }
+[data-testid="stAudio"] { margin: -2px 0 6px 0 !important; }
+[data-testid="stAudio"] audio { height: 38px; width: 100%; max-width: 520px; }
 
 /* temporizador */
 .timer { font-weight: 800; font-size: 3.3rem; letter-spacing: -0.04em; line-height: 1; }
@@ -252,7 +252,11 @@ def decir(texto):
 
 
 def mostrar_voz():
-    """Muestra lo que dice el chef y lo reproduce (gTTS; si falla, la voz del navegador)."""
+    """Muestra lo que dice el chef y lo reproduce (gTTS; si falla, la voz del navegador).
+
+    Si el navegador bloquea la reproducción automática, aparece un botón
+    «Toca para escuchar» y el reproductor queda visible para darle play.
+    """
     ss = st.session_state
     v = ss.get("voz")
     slot = ss.get("_slot_voz") or st.container()
@@ -265,11 +269,60 @@ def mostrar_voz():
         mp3 = voz.sintetizar(v["texto"], v["id"])
         if mp3:
             st.audio(mp3, format="audio/mp3", autoplay=True)
-        else:
-            components.html(
-                "<!-- %d --><script>try{var s=window.parent.speechSynthesis;s.cancel();"
-                "var u=new SpeechSynthesisUtterance(%s);u.lang='es-ES';s.speak(u);}catch(e){}</script>"
-                % (v["id"], _js_str(v["texto"])), height=0)
+        components.html(_JS_VOZ % (v["id"], _js_str(v["texto"]), "true" if mp3 else "false"), height=0)
+
+
+# Se ejecuta una vez por cada frase nueva (el número cambia y el iframe se recrea).
+_JS_VOZ = """<script>
+(function () {
+  var ID = %d, TEXTO = %s, HAY_MP3 = %s;
+  var P = window.parent, D = P.document;
+  function quitar() { var b = D.getElementById("chef-voz-btn"); if (b) b.remove(); }
+  function boton(accion) {
+    var b = D.getElementById("chef-voz-btn");
+    if (!b) {
+      b = D.createElement("button");
+      b.id = "chef-voz-btn";
+      b.textContent = "🔊 Toca para escuchar al chef";
+      b.style.cssText = "position:fixed;right:22px;bottom:22px;z-index:999999;background:#004AAD;color:#FCF8ED;" +
+        "border:3px solid #FCF8ED;border-radius:22px 28px 18px 30px;padding:14px 22px;font:600 17px Poppins,sans-serif;" +
+        "box-shadow:5px 6px 0 rgba(0,74,173,.35);cursor:pointer";
+      D.body.appendChild(b);
+    }
+    b.onclick = function () { quitar(); accion(); };
+  }
+  function vozNavegador() {
+    try {
+      var s = P.speechSynthesis; s.cancel();
+      var u = new P.SpeechSynthesisUtterance(TEXTO); u.lang = "es-ES";
+      var es = s.getVoices().filter(function (x) { return x.lang && x.lang.indexOf("es") === 0; });
+      if (es.length) u.voice = es[0];
+      s.speak(u);
+    } catch (e) {}
+  }
+  if (!HAY_MP3) {             // sin internet para gTTS: voz del navegador
+    vozNavegador();
+    setTimeout(function () {
+      var s = P.speechSynthesis;
+      if (s && !s.speaking && !s.pending) boton(vozNavegador);
+    }, 900);
+    return;
+  }
+  var intentos = 0;
+  (function reproducir() {
+    var a = D.querySelector('[data-testid="stAudio"] audio') || D.querySelector("audio");
+    if (!a || !a.src) { if (intentos++ < 40) setTimeout(reproducir, 150); return; }
+    if (!a.paused) { quitar(); return; }          // la reproducción automática funcionó
+    var p = a.play();
+    if (p && p.then) {
+      p.then(quitar).catch(function (e) {
+        if (e && e.name === "NotAllowedError") boton(function () { a.currentTime = 0; a.play(); });
+        else if (intentos++ < 40) setTimeout(reproducir, 200);
+      });
+    }
+  })();
+})();
+</script>"""
 
 
 def _js_str(t):
